@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mountain Environment - A-Frame</title>
+
+    <script src="https://aframe.io/releases/1.8.0/aframe.min.js"></script>
+
+    <script>
+        // Click an object to pause or resume its animation
+        AFRAME.registerComponent('toggle-anim', {
+            schema: {
+                target: { type: 'selector', default: null }
+            },
+
+            init: function () {
+                this.playing = true;
+
+                this.el.addEventListener('click', () => {
+                    const target = this.data.target || this.el;
+
+                    Object.keys(target.components)
+                        .filter(name => name.startsWith('animation'))
+                        .forEach(name => {
+                            const anim = target.components[name];
+
+                            if (this.playing) {
+                                anim.pause();
+                            } else {
+                                anim.play();
+                            }
+                        });
+
+                    this.playing = !this.playing;
+                });
+            }
+        });
+
+        // Put an image on a GLB model as its skin.
+        // If the model has no UV coordinates, wrap the image around it automatically.
+        AFRAME.registerComponent('apply-texture', {
+            schema: { src: { type: 'selector' } },
+
+            init: function () {
+                this.el.addEventListener('model-loaded', () => this.apply());
+            },
+
+            apply: function () {
+                const THREE = AFRAME.THREE;
+                const img = this.data.src;
+                const root = this.el.getObject3D('mesh');
+                if (!img || !root) return;
+
+                const tex = new THREE.Texture(img);
+                tex.colorSpace = THREE.SRGBColorSpace;
+                tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+
+                root.traverse((node) => {
+                    if (!node.isMesh) return;
+                    const geo = node.geometry;
+                    const hasUV = !!geo.attributes.uv;
+
+                    if (!hasUV) {
+                        // Cylindrical wrap around the Y axis
+                        geo.computeBoundingBox();
+                        const bb = geo.boundingBox;
+                        const pos = geo.attributes.position;
+                        const uv = new Float32Array(pos.count * 2);
+                        const h = (bb.max.y - bb.min.y) || 1;
+                        const cx = (bb.max.x + bb.min.x) / 2;
+                        const cz = (bb.max.z + bb.min.z) / 2;
+                        for (let i = 0; i < pos.count; i++) {
+                            const x = pos.getX(i) - cx;
+                            const y = pos.getY(i);
+                            const z = pos.getZ(i) - cz;
+                            uv[i * 2] = Math.atan2(z, x) / (Math.PI * 2) + 0.5;
+                            uv[i * 2 + 1] = (y - bb.min.y) / h;
+                        }
+                        geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+                    }
+
+                    // glTF UVs expect flipY = false; generated UVs expect true
+                    tex.flipY = !hasUV;
+                    tex.needsUpdate = true;
+
+                    node.material = new THREE.MeshStandardMaterial({
+                        map: tex,
+                        roughness: 0.8,
+                        metalness: 0
+                    });
+                });
+            }
+        });
+    </script>
+</head>
+
+<body>
+    <a-scene background="color: #9295D8" renderer="colorManagement: true">
+
+        <!-- ASSETS (must be inside the scene) -->
+        <a-assets>
+            <a-asset-item id="myModel" src="./assets/3d models/bunny.glb"></a-asset-item>
+            <img id="bunnyTex" src="./assets/image/texture-fur.jpeg">
+        </a-assets>
+
+        <!-- SKY -->
+        <a-sky color="#9295D8"></a-sky>
+
+        <!-- SUN -->
+        <a-sphere position="12 10 -38" radius="2" material="shader: flat; color: #FFD78A">
+        </a-sphere>
+
+        <!-- DISTANT MOUNTAINS -->
+        <a-cone position="-15 5 -38" radius-bottom="14" radius-top="0" height="24" color="#747FA8">
+        </a-cone>
+
+        <a-cone position="0 7 -42" radius-bottom="17" radius-top="0" height="30" color="#485779">
+        </a-cone>
+
+        <a-cone position="15 5 -37" radius-bottom="14" radius-top="0" height="24" color="#626F96">
+        </a-cone>
+
+        <!-- SNOW CAPS -->
+        <a-cone position="0 19 -42" radius-bottom="4" radius-top="0" height="6" color="#E6E9F2">
+        </a-cone>
+
+        <!-- GREEN LAND -->
+        <a-plane position="0 -0.1 -15" rotation="-90 0 0" width="200" height="200"
+            material="color: #38523C; roughness: 1">
+        </a-plane>
+
+        <!-- LAKE -->
+        <a-plane position="0 0.03 -23" rotation="-90 0 0" width="32" height="14"
+            material="color: #526F98; roughness: 0.25">
+        </a-plane>
+
+        <!-- LEFT HILL -->
+        <a-sphere position="-15 -4 -20" radius="12" scale="1 0.6 1" color="#294738">
+        </a-sphere>
+
+        <!-- RIGHT HILL -->
+        <a-sphere position="15 -4 -22" radius="12" scale="1 0.6 1" color="#35583D">
+        </a-sphere>
+
+        <!-- TREE 1 -->
+        <a-entity position="-8 0 -10">
+            <a-cylinder position="0 1 0" radius="0.2" height="2" color="#624733">
+            </a-cylinder>
+
+            <a-cone position="0 2.4 0" radius-bottom="1.2" radius-top="0" height="2.5" color="#1E4936">
+            </a-cone>
+
+            <a-cone position="0 3.3 0" radius-bottom="0.85" radius-top="0" height="2" color="#28583E">
+            </a-cone>
+        </a-entity>
+
+        <!-- TREE 2 -->
+        <a-entity position="8 0 -12">
+            <a-cylinder position="0 1 0" radius="0.2" height="2" color="#624733">
+            </a-cylinder>
+
+            <a-cone position="0 2.4 0" radius-bottom="1.2" radius-top="0" height="2.5" color="#1E4936">
+            </a-cone>
+
+            <a-cone position="0 3.3 0" radius-bottom="0.85" radius-top="0" height="2" color="#28583E">
+            </a-cone>
+        </a-entity>
+
+        <!-- BUNNY (GLB model). Adjust scale if it looks too big or too small -->
+        <a-entity id="bunny" class="clickable" gltf-model="#myModel" position="1 0 -7" scale="0.1 0.1 0.1"
+            apply-texture="src: #bunnyTex" toggle-anim animation="property: rotation;
+            to: 0 360 0;
+            dur: 8000;
+            easing: linear;
+            loop: true">
+        </a-entity>
+
+        <!-- MOVING BLUE LIGHT -->
+        <a-entity id="blacklight" light="type: point;
+            color: #4DA6FF;
+            intensity: 30;
+            distance: 20" position="-5 2 -5" animation="property: position;
+            to: 5 5 -10;
+            dur: 2500;
+            dir: alternate;
+            easing: easeInOutSine;
+            loop: true">
+
+            <!-- Clickable blue box -->
+            <a-box class="clickable" position="0 0 0" scale="0.5 0.5 0.5" material="color: #4DA6FF;
+                emissive: #1677FF;
+                emissiveIntensity: 0.8" toggle-anim="target: #blacklight">
+            </a-box>
+        </a-entity>
+
+        <!-- LIGHTING -->
+        <a-entity light="type: ambient;
+            color: #D7C9FF;
+            intensity: 1.2">
+        </a-entity>
+
+        <a-entity light="type: directional;
+            color: #FFD2A0;
+            intensity: 1.5" position="5 8 -10">
+        </a-entity>
+
+        <!-- CAMERA -->
+        <a-entity camera position="0 1.6 0" look-controls wasd-controls cursor="rayOrigin: mouse; fuse: false"
+            raycaster="objects: .clickable">
+        </a-entity>
+
+        <!-- INSTRUCTIONS -->
+        <a-text value="Click the bunny or blue box to toggle animation" position="-3 4 -6" color="#FFFFFF" width="7">
+        </a-text>
+
+    </a-scene>
+
+    <!-- BACKGROUND AUDIO -->
+    <audio id="backgroundSound" src="https://cdn.aframe.io/basic-guide/audio/backgroundnoise.wav" preload="auto" loop>
+    </audio>
+
+    <script>
+        // Play sound after the first user interaction
+        document.addEventListener('click', function playAudioOnce() {
+            const audio = document.getElementById('backgroundSound');
+
+            audio.play().catch(function () {
+                console.log('Audio playback requires user interaction.');
+            });
+
+        }, { once: true });
+    </script>
+
+</body>
+
+</html>

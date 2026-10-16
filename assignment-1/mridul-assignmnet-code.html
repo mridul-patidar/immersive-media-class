@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Mountain Environment</title>
+    <script src="https://aframe.io/releases/1.8.0/aframe.min.js"></script>
+    <script src="https://unpkg.com/aframe-environment-component@1.5.0/dist/aframe-environment-component.min.js"></script>
+
+    <script>
+        // Texture component
+        AFRAME.registerComponent('texture-src', {
+            schema: { type: 'selector' },
+            init: function () {
+                this.el.addEventListener('model-loaded', () => {
+                    const tex = new THREE.Texture(this.data);
+                    tex.needsUpdate = true;
+                    tex.flipY = false;
+                    tex.colorSpace = THREE.SRGBColorSpace;
+
+                    this.el.getObject3D('mesh').traverse((n) => {
+                        if (!n.isMesh) return;
+
+                        // Generate simple UVs if the model has none
+                        const geo = n.geometry;
+                        if (!geo.attributes.uv) {
+                            geo.computeBoundingBox();
+                            const b = geo.boundingBox;
+                            const p = geo.attributes.position;
+                            const uv = new Float32Array(p.count * 2);
+                            for (let i = 0; i < p.count; i++) {
+                                uv[i * 2] = (p.getX(i) - b.min.x) / (b.max.x - b.min.x);
+                                uv[i * 2 + 1] = 1 - (p.getY(i) - b.min.y) / (b.max.y - b.min.y);
+                            }
+                            geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+                        }
+
+                        n.material.map = tex;
+                        n.material.color.set('#ffffff');
+                        n.material.needsUpdate = true;
+                    });
+                });
+            }
+        });
+
+        // Click to start / stop an animation
+        AFRAME.registerComponent('toggle-anim', {
+            schema: { target: { type: 'selector' } },
+            init: function () {
+                this.playing = true;
+                this.el.addEventListener('click', () => {
+                    const target = this.data.target || this.el;
+                    const anim = target.components.animation;
+                    if (!anim) return;
+
+                    this.playing = !this.playing;
+                    if (this.playing) {
+                        anim.play();
+                    } else {
+                        anim.pause();
+                    }
+                });
+            }
+        });
+    </script>
+</head>
+
+<body>
+    <a-scene>
+        <a-assets>
+            <a-asset-item id="myModel" src="./assets/3d models/bunny.glb"></a-asset-item>
+            <img id="bunnyTex" src="./assets/image/texture-snake.jpg">
+            <audio id="backgroundSound"
+                   src="https://cdn.aframe.io/basic-guide/audio/backgroundnoise.wav"
+                   crossorigin="anonymous" preload="auto"></audio>
+        </a-assets>
+
+        <a-entity environment="preset: yavapai; dressingAmount: 500"></a-entity>
+
+        <!-- Background audio (starts on first click) -->
+        <a-entity id="soundPlayer"
+                  sound="src: #backgroundSound; loop: true; volume: 0.5; positional: false">
+        </a-entity>
+
+        <!-- Camera with mouse cursor -->
+        <a-entity camera position="0 1.6 0" look-controls wasd-controls
+                  cursor="rayOrigin: mouse" raycaster="objects: .clickable">
+        </a-entity>
+
+        <!-- Title -->
+        <a-text value="Click any object to start / stop animation"
+                position="6 4 -6" color="black" width="10">
+        </a-text>
+
+        <!-- Bunny: texture + spin (click to toggle) -->
+        <a-entity class="clickable"
+                  gltf-model="#myModel"
+                  texture-src="#bunnyTex"
+                  toggle-anim
+                  position="0 0 -8"
+                  scale="0.1 0.1 0.1"
+                  animation="property: rotation; to: 0 360 0; dur: 8000; easing: linear; loop: true"></a-entity>
+
+        <!-- Ambient light -->
+        <a-entity light="type: ambient; color: purple; intensity: 3"></a-entity>
+
+        <!-- Moving blue point light -->
+        <a-entity id="blueLight"
+                  light="type: point; color: blue; intensity: 30"
+                  position="-7 2 -6"
+                  animation="property: position; to: 5 6 -12; dur: 1350; dir: alternate; easing: easeInOutSine; loop: true">
+            <a-sphere class="clickable" radius="0.3"
+                      material="metal: flat; color: #4da6ff"
+                      toggle-anim="target: #blueLight"></a-sphere>
+        </a-entity>
+    </a-scene>
+
+    <script>
+        // Browsers only allow audio after a user interaction,
+        // so start the sound on the first click anywhere.
+        const soundPlayer = document.querySelector("#soundPlayer");
+        document.addEventListener("click", () => {
+            soundPlayer.components.sound.playSound();
+        }, { once: true });
+    </script>
+</body>
+
+</html>
