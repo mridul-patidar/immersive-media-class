@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <script src="https://aframe.io/releases/1.8.0/aframe.min.js"></script>
+
+    <script>
+        AFRAME.registerComponent('simple-hit-test', {
+
+            init: function () {
+                const THREE = AFRAME.THREE;
+
+                this.hitTestSource = null;
+                this.marker = null;
+                this.cube = null;
+                this.target = new THREE.Vector3();
+                this.hasPos = false;
+
+                this.onSelect = this.onSelect.bind(this);
+
+                this.el.addEventListener('enter-vr', async () => {
+
+                    const renderer = this.el.renderer;
+                    const session = renderer.xr.getSession();
+
+                    if (!session) {
+                        console.warn('No XR session');
+                        return;
+                    }
+
+                    // Looked up here, after the scene is fully ready
+                    this.marker = document.querySelector('#marker');
+                    this.cube = document.querySelector('#cube');
+
+                    // Tap to place
+                    session.addEventListener('select', this.onSelect);
+
+                    session.addEventListener('end', () => {
+                        this.hitTestSource = null;
+                        this.hasPos = false;
+                        session.removeEventListener('select', this.onSelect);
+                    });
+
+                    try {
+                        const viewerSpace = await session.requestReferenceSpace('viewer');
+                        this.hitTestSource = await session.requestHitTestSource({
+                            space: viewerSpace
+                        });
+                        console.log('Hit test ready');
+                    } catch (error) {
+                        console.error('Hit test setup failed:', error);
+                    }
+                });
+            },
+
+            onSelect: function () {
+                if (!this.marker || !this.cube) return;
+                if (!this.marker.object3D.visible) return;
+
+                // Cube is 0.2 tall, so lift by half its height to sit on the surface
+                this.cube.object3D.position.copy(this.marker.object3D.position);
+                this.cube.object3D.position.y += 0.1;
+                this.cube.object3D.visible = true;
+            },
+
+            tick: function () {
+                if (!this.hitTestSource || !this.marker) return;
+
+                const xr = this.el.renderer.xr;
+                const frame = xr.getFrame();
+                const refSpace = xr.getReferenceSpace(); // fetched every frame, not cached
+                if (!frame || !refSpace) return;
+
+                const results = frame.getHitTestResults(this.hitTestSource);
+                const obj = this.marker.object3D;
+
+                if (results.length === 0) {
+                    obj.visible = false;
+                    this.hasPos = false;
+                    return;
+                }
+
+                const pose = results[0].getPose(refSpace);
+                if (!pose) return;
+
+                const p = pose.transform.position;
+                this.target.set(p.x, p.y, p.z);
+
+                if (!this.hasPos) {
+                    obj.position.copy(this.target);        // snap on first hit
+                    this.hasPos = true;
+                } else {
+                    obj.position.lerp(this.target, 0.25);  // smoothing: lower = smoother but laggier
+                }
+
+                obj.visible = true;
+            }
+        });
+    </script>
+
+</head>
+
+<body>
+
+    <a-scene xr-mode-ui="XRMode: ar" webxr="optionalFeatures: hit-test, local-floor;" simple-hit-test>
+
+        <a-ring id="marker" radius-inner="0.025" radius-outer="0.04" rotation="-90 0 0" color="yellow"
+            material="opacity: 0.7; transparent: true" visible="false">
+        </a-ring>
+
+        <a-box id="cube" width="0.2" height="0.2" depth="0.2" color="tomato" visible="false">
+        </a-box>
+
+    </a-scene>
+
+</body>
+
+</html>
