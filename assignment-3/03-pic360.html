@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <script src="https://aframe.io/releases/1.8.0/aframe.min.js"></script>
+</head>
+
+<body>
+
+    <a-scene>
+
+        <a-assets>
+            <img id="pic360" crossorigin="anonymous"
+                src="../assignment-3/images-and-videos/pic360.jpg">
+        </a-assets>
+
+
+        <a-sky src="#pic360" rotation="0 -90 0">
+        </a-sky>
+
+
+        <a-camera look-controls="touchEnabled: true;
+                           magicWindowTrackingEnabled: true">
+        </a-camera>
+
+    </a-scene>
+
+</body>
+
+</html>
