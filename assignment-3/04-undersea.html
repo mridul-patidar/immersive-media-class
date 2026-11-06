@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <script src="https://aframe.io/releases/1.8.0/aframe.min.js"></script>
+
+    <style>
+        #videoControls {
+            position: fixed;
+            left: 50%;
+            bottom: 30px;
+            transform: translateX(-50%);
+            z-index: 10;
+        }
+
+        #videoControls button {
+            padding: 12px 20px;
+            font-size: 18px;
+            margin: 5px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Video controls -->
+    <div id="videoControls">
+        <button id="playButton">Play</button>
+        <button id="pauseButton">Pause</button>
+    </div>
+
+    <!-- A-Frame scene -->
+    <a-scene>
+
+        <a-assets>
+            <video id="sea360"
+                   src="../assignment-3/images-and-videos/360sea.mp4"
+                   crossorigin="anonymous"
+                   preload="auto"
+                   loop
+                   playsinline
+                   webkit-playsinline>
+            </video>
+        </a-assets>
+
+        <!-- 360 video -->
+        <a-videosphere src="#sea360"></a-videosphere>
+
+        <!-- Camera -->
+        <a-camera look-controls="touchEnabled: true; magicWindowTrackingEnabled: true"></a-camera>
+
+    </a-scene>
+
+    <script>
+        const video = document.querySelector('#sea360');
+
+        document.querySelector('#playButton')
+            .addEventListener('click', () => video.play());
+
+        document.querySelector('#pauseButton')
+            .addEventListener('click', () => video.pause());
+    </script>
+
+</body>
+</html>
