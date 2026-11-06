@@ -36,18 +36,13 @@
     <a-scene>
 
         <a-assets>
-            <video id="sea360"
-                   src="../assignment-3/images-and-videos/360sea.mp4"
-                   crossorigin="anonymous"
-                   preload="auto"
-                   loop
-                   playsinline
-                   webkit-playsinline>
+            <video id="Formula" src="../assignment-3/images-and-videos/F1.mp4" crossorigin="anonymous" preload="auto"
+                loop playsinline webkit-playsinline>
             </video>
         </a-assets>
 
         <!-- 360 video -->
-        <a-videosphere src="#sea360"></a-videosphere>
+        <a-videosphere src="#Formula"></a-videosphere>
 
         <!-- Camera -->
         <a-camera look-controls="touchEnabled: true; magicWindowTrackingEnabled: true"></a-camera>
@@ -55,7 +50,7 @@
     </a-scene>
 
     <script>
-        const video = document.querySelector('#sea360');
+        const video = document.querySelector('#Formula');
 
         document.querySelector('#playButton')
             .addEventListener('click', () => video.play());
@@ -65,4 +60,5 @@
     </script>
 
 </body>
+
 </html>
