@@ -76,7 +76,7 @@
                             });
 
                         this.refSpace =
-                            renderer.xr.getReferenceSpace();
+                            await session.requestReferenceSpace('local');
 
                         console.log("Hit test ready");
 
@@ -152,8 +152,11 @@
 
     </div>
 
-    <a-scene xr-mode-ui="XRMode: ar" webxr="optionalFeatures: hit-test, dom-overlay;
-           overlayElement: #overlay;" simple-hit-test>
+    <a-scene xr-mode-ui="XRMode: ar" webxr="
+        requiredFeatures: hit-test;
+        optionalFeatures: dom-overlay;
+        referenceSpaceType: local;
+        overlayElement: #overlay;" simple-hit-test>
 
         <a-ring id="marker" radius-inner="0.025" radius-outer="0.04" rotation="-90 0 0" color="yellow" visible="false">
         </a-ring>
