@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AR Object Placer</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        #status {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            z-index: 9999;
+            background: #fff;
+            color: #000;
+            padding: 8px;
+            border: 1px solid #888;
+            font-size: 14px;
+        }
+
+        #overlay {
+            display: none;
+        }
+
+        #overlay:xr-overlay {
+            display: block;
+        }
+
+        #mode-bar {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+        }
+
+        #mode-text {
+            color: #fff;
+            background: rgba(0, 0, 0, .5);
+            padding: 4px 8px;
+        }
+
+        #actions {
+            display: none;
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        button,
+        input {
+            padding: 12px;
+            font-size: 16px;
+        }
+
+        #crosshair {
+            display: none;
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 40px;
+            color: #fff;
+        }
+    </style>
+    <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
+</head>
+
+<body>
+    <div id="status">Starting…</div>
+
+    <div id="overlay">
+        <div id="mode-bar">
+            <button id="add-button">ADD</button>
+            <button id="select-button">SELECT</button>
+            <span id="mode-text">Mode: ADD</span>
+        </div>
+        <div id="crosshair">+</div>
+        <div id="actions">
+            <button id="color-button">Color</button>
+            <button id="animate-button">Animate</button>
+            <button id="delete-button">Delete</button>
+            <input id="label-input" type="text" placeholder="Enter label">
+            <button id="label-button">Label</button>
+        </div>
+    </div>
+
+    <a-scene xr-mode-ui="XRMode: ar"
+        webxr="requiredFeatures: hit-test; optionalFeatures: dom-overlay; referenceSpaceType: local; overlayElement: #overlay;"
+        simple-hit-test>
+        <a-ring id="marker" radius-inner="0.025" radius-outer="0.04" rotation="-90 0 0" color="yellow"
+            visible="false"></a-ring>
+        <a-camera id="camera" look-controls="enabled: false" wasd-controls="enabled: false"
+            raycaster="objects: .selectable; far: 20"></a-camera>
+    </a-scene>
+
+    <script>
+        // ---------- Shared state ----------
+        let mode = 'add';
+        let selectedObject = null;
+
+        // ---------- Startup diagnostics ----------
+        const statusEl = document.getElementById('status');
+        window.addEventListener('error', e => { statusEl.textContent = 'JS error: ' + e.message; });
+
+        if (typeof AFRAME === 'undefined') {
+            statusEl.textContent = 'A-Frame failed to load (check network or script URL).';
+        } else if (!window.isSecureContext) {
+            statusEl.textContent = 'Not a secure context: serve over HTTPS or localhost.';
+        } else if (!navigator.xr) {
+            statusEl.textContent = 'WebXR not available here. Use Chrome on an ARCore Android phone.';
+        } else {
+            navigator.xr.isSessionSupported('immersive-ar').then(ok => {
+                statusEl.textContent = ok
+                    ? 'AR supported. Tap the AR button at the bottom right.'
+                    : 'immersive-ar not supported on this device/browser.';
+            });
+        }
+
+        // ---------- Hit-test component ----------
+        if (typeof AFRAME !== 'undefined') {
+            AFRAME.registerComponent('simple-hit-test', {
+                init: function () {
+                    this.hitTestSource = null;
+
+                    this.el.sceneEl.addEventListener('enter-vr', async () => {
+                        const session = this.el.sceneEl.renderer.xr.getSession();
+                        if (!session) return;
+                        try {
+                            const viewerSpace = await session.requestReferenceSpace('viewer');
+                            this.hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
+                            console.log('Hit test ready');
+                        } catch (err) {
+                            console.error('Hit test setup failed:', err);
+                        }
+                    });
+
+                    this.el.sceneEl.addEventListener('exit-vr', () => {
+                        if (this.hitTestSource) this.hitTestSource.cancel();
+                        this.hitTestSource = null;
+                        const m = document.querySelector('#marker');
+                        if (m) m.object3D.visible = false;
+                    });
+                },
+
+                tick: function () {
+                    if (!this.hitTestSource) return;
+                    const frame = this.el.sceneEl.frame;
+                    const refSpace = this.el.sceneEl.renderer.xr.getReferenceSpace();
+                    if (!frame || !refSpace) return;
+
+                    const marker = document.querySelector('#marker');
+                    if (!marker) return;
+
+                    const results = frame.getHitTestResults(this.hitTestSource);
+                    if (results.length > 0) {
+                        const pose = results[0].getPose(refSpace);
+                        if (!pose) return;
+                        const p = pose.transform.position;
+                        marker.object3D.position.set(p.x, p.y, p.z);
+                        marker.object3D.visible = (mode === 'add');
+                    } else {
+                        marker.object3D.visible = false;
+                    }
+                }
+            });
+        }
+
+        // ---------- Scene logic ----------
+        const scene = document.querySelector('a-scene');
+        const actionsEl = document.querySelector('#actions');
+
+        function clearSelection() {
+            if (selectedObject) {
+                selectedObject.setAttribute('color', selectedObject.dataset.baseColor);
+                selectedObject = null;
+            }
+            actionsEl.style.display = 'none';
+        }
+
+        function placeObject() {
+            const marker = document.querySelector('#marker');
+            if (!marker.object3D.visible) return;
+
+            const cylinder = document.createElement('a-cylinder');
+            cylinder.setAttribute('radius', '0.08');
+            cylinder.setAttribute('height', '0.25');
+            cylinder.setAttribute('color', 'teal');
+            cylinder.dataset.baseColor = 'teal';
+            cylinder.setAttribute('class', 'selectable');
+
+            // Small round white mark on the side. It rotates with the cylinder,
+            // so the spin becomes visible when Animate is pressed.
+            const dot = document.createElement('a-sphere');
+            dot.setAttribute('radius', '0.025');
+            dot.setAttribute('color', 'white');
+            dot.setAttribute('position', '0 0.05 0.08'); // half-sunk into the cylinder wall
+            dot.setAttribute('class', 'rotation-mark');
+            cylinder.appendChild(dot);
+
+            const pos = marker.object3D.position;
+            cylinder.setAttribute('position', { x: pos.x, y: pos.y + 0.125, z: pos.z });
+            scene.appendChild(cylinder);
+        }
+
+        function selectObject() {
+            const camera = document.querySelector('#camera');
+            const hits = camera.components.raycaster.intersectedEls;
+            if (hits.length === 0) return;
+
+            // The ray may hit the mark or a label (children); resolve to the cylinder.
+            const target = hits[0].closest('.selectable');
+            if (!target) return;
+
+            if (selectedObject) {
+                selectedObject.setAttribute('color', selectedObject.dataset.baseColor);
+            }
+            selectedObject = target;
+            selectedObject.setAttribute('color', 'yellow');
+            actionsEl.style.display = 'flex';
+        }
+
+        function setMode(newMode) {
+            mode = newMode;
+            document.querySelector('#mode-text').textContent = 'Mode: ' + newMode.toUpperCase();
+            document.querySelector('#crosshair').style.display = newMode === 'select' ? 'block' : 'none';
+            if (newMode === 'add') clearSelection();
+        }
+
+        document.querySelector('#add-button').addEventListener('click', () => setMode('add'));
+        document.querySelector('#select-button').addEventListener('click', () => setMode('select'));
+
+        // Stop overlay taps from also firing an AR "select"
+        document.querySelectorAll('#overlay button, #overlay input').forEach(el => {
+            el.addEventListener('beforexrselect', e => e.preventDefault());
+        });
+
+        document.querySelector('#color-button').addEventListener('click', () => {
+            if (!selectedObject) return;
+            selectedObject.dataset.baseColor = 'crimson';
+            selectedObject.setAttribute('color', 'crimson');
+        });
+
+        document.querySelector('#animate-button').addEventListener('click', () => {
+            if (!selectedObject) return;
+            selectedObject.setAttribute('animation',
+                'property: rotation; from: 0 0 0; to: 0 360 0; dur: 2000; easing: linear; loop: true');
+        });
+
+        document.querySelector('#delete-button').addEventListener('click', () => {
+            if (!selectedObject) return;
+            selectedObject.remove();
+            selectedObject = null;
+            actionsEl.style.display = 'none';
+        });
+
+        document.querySelector('#label-button').addEventListener('click', () => {
+            if (!selectedObject) return;
+            const input = document.querySelector('#label-input');
+            if (!input.value) return;
+
+            let label = selectedObject.querySelector('.object-label');
+            if (!label) {
+                label = document.createElement('a-text');
+                label.setAttribute('class', 'object-label');
+                label.setAttribute('color', 'white');
+                label.setAttribute('align', 'center');
+                label.setAttribute('position', '0 0.22 0');
+                label.setAttribute('width', '1');
+                label.setAttribute('side', 'double');
+                selectedObject.appendChild(label);
+            }
+            label.setAttribute('value', input.value);
+            input.value = '';
+        });
+
+        scene.addEventListener('enter-vr', () => {
+            const session = scene.renderer.xr.getSession();
+            session.addEventListener('select', () => {
+                if (mode === 'add') placeObject();
+                else if (mode === 'select') selectObject();
+            });
+        });
+    </script>
+</body>
+
+</html>
